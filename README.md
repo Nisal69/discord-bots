@@ -128,6 +128,7 @@ For the full detailed reference of **Bot 1 + Bot 3** and **Bot 2**, check the se
 
 ## 📂 Repository Structure
 
+```
 discord-bots/
 │
 ├── Bots/
@@ -139,7 +140,7 @@ discord-bots/
 ├── .gitignore # Ignore tokens, DB files, cache
 ├── requirements.txt # Dependencies
 └── README.md # Documentation
-
+```
 
 ---
 
