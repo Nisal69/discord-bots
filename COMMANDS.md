@@ -39,11 +39,11 @@ This document provides a full reference of commands available in **Bot 1 + Bot 3
 - `?mywins [@user | id | name]` → Detailed stats: wins, losses, points, tier, streak, rank.  
 
 ### ⚠️ Warnings System
-- `?warn @user [reason...]` → Warns a member.  
+- `!warn @user [reason...]` → Warns a member.  
   - At **3 warnings** → 2-day timeout.  
   - At **5 warnings** → 3-day timeout + warnings reset to 0.  
-- `?warnings [@user]` → View your warnings (or another member’s). Shows count + last 10 reasons.  
-- `?resetwarnings @user` → Reset all warnings for a member and clear any active timeout.  
+- `!warnings [@user]` → View your warnings (or another member’s). Shows count + last 10 reasons.  
+- `!resetwarnings @user` → Reset all warnings for a member and clear any active timeout.  
 
 ### 📖 Help
 - `?onevone_help` → How 1v1 works + list of commands (queue + challenges).  
@@ -61,8 +61,8 @@ This document provides a full reference of commands available in **Bot 1 + Bot 3
 - `?cancelmatch <admin_msg_id | @A @B> [reason...]` → Cancel an in-progress 1v1.  
   - Works by **admin results card ID** *or* both player mentions.  
   - Marks the match as **CANCELLED**, notifies players, deletes temp rooms, and skips scoring.  
-- `?warn @user [reason...]` → Issue warnings (auto-escalates timeouts).  
-- `?resetwarnings @user` → Fully clear warnings and remove any timeout.  
+- `!warn @user [reason...]` → Issue warnings (auto-escalates timeouts).  
+- `!clearwarnings @user` → Fully clear warnings and remove any timeout of a certain user.  
 
 ### 🎯 Admin Actions
 - React with **:a: / :b:** on the **admin results card** to confirm winner (A or B).  
@@ -70,7 +70,7 @@ This document provides a full reference of commands available in **Bot 1 + Bot 3
 
 ### 📢 Channel Use
 - Use **match commands** (`?challenge`, `?queue`, `?leavequeue`, `?cancelchallenge`) in `#》︱1v1-requests`.  
-- Use **stats commands** (`?leaderboard`, `?mywins`, `?warnings`) in `#》︱check-stats`.  
+- Use **stats commands** (`?leaderboard`, `?mywins`) in `#》︱check-stats`.  
 - All warnings are automatically **logged** to the moderation channel (`1411283522131591178`).  
 
 ---
