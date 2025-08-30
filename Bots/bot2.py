@@ -29,6 +29,12 @@ intents.message_content = True
 intents.members = True
 intents.reactions = True
 
+# ===== WARNINGS CONFIG =====
+WARN_TIMEOUT_AT_3_DAYS = 2  # 2 days at 3 warnings
+WARN_TIMEOUT_AT_5_DAYS = 3  # 3 days at 5 warnings
+WARN_RESET_AT_5 = True      # reset to 0 after applying the 5-warning timeout
+WARN_LOG_CHANNEL_ID = 1411283522131591178  # <- your log channel
+
 # -------- Create bot2 --------
 bot2 = commands.Bot(command_prefix='?', intents=intents)
 
@@ -43,6 +49,82 @@ async def ping(ctx):
 
 # =========================
 # PASTE ALL YOUR BOT 2 LOGIC BELOW
+
+# ===== WARNINGS HELPERS =====
+_warn_conn = None
+
+def warn_init_db():
+    global _warn_conn
+    if _warn_conn is None:
+        _warn_conn = _warn_db()
+
+def _get_warn_count(guild_id: int, user_id: int) -> int:
+    cur = _warn_conn.execute("SELECT count FROM warnings WHERE guild_id=? AND user_id=?", (guild_id, user_id))
+    row = cur.fetchone()
+    return row[0] if row else 0
+
+def _set_warn_count(guild_id: int, user_id: int, count: int):
+    now = datetime.now(timezone.utc).isoformat()
+    _warn_conn.execute("""
+        INSERT INTO warnings(guild_id, user_id, count, last_at)
+        VALUES(?, ?, ?, ?)
+        ON CONFLICT(guild_id, user_id) DO UPDATE SET count=excluded.count, last_at=excluded.last_at
+    """, (guild_id, user_id, count, now))
+    _warn_conn.commit()
+
+def _log_warning(guild_id: int, user_id: int, mod_id: int, reason: str | None):
+    _warn_conn.execute("""
+        INSERT INTO warnings_log(guild_id, user_id, mod_id, reason, created_at)
+        VALUES(?, ?, ?, ?, ?)
+    """, (guild_id, user_id, mod_id, reason or "", datetime.now(timezone.utc).isoformat()))
+    _warn_conn.commit()
+
+def _get_warning_history(guild_id: int, user_id: int, limit: int = 10):
+    cur = _warn_conn.execute("""
+        SELECT mod_id, reason, created_at
+        FROM warnings_log
+        WHERE guild_id=? AND user_id=?
+        ORDER BY id DESC
+        LIMIT ?
+    """, (guild_id, user_id, limit))
+    return cur.fetchall()
+
+async def _apply_timeout(member, days: int, reason: str | None = None):
+    # discord.py 2.x supports member.timeout(until: datetime|None)
+    until = datetime.now(timezone.utc) + timedelta(days=days)
+    try:
+        await member.timeout(until=until, reason=reason or "Automated timeout triggered by warnings")
+        return True, until
+    except Exception as e:
+        return False, e
+
+async def _remove_timeout(member, reason: str | None = None):
+    try:
+        # Remove timeout by passing None
+        await member.timeout(until=None, reason=reason or "Warnings reset")
+        return True, None
+    except Exception as e:
+        return False, e
+
+def _get_warn_log_channel(guild: discord.Guild):
+    # Only valid inside the guild that actually has the channel
+    ch = guild.get_channel(WARN_LOG_CHANNEL_ID)
+    return ch
+
+async def _send_warn_log(guild: discord.Guild, embed: discord.Embed | None = None, text: str | None = None):
+    ch = _get_warn_log_channel(guild)
+    if not ch:
+        print(f"[WARNINGS] Log channel {WARN_LOG_CHANNEL_ID} not found in guild {guild.id}")
+        return
+    try:
+        if embed:
+            await ch.send(embed=embed)
+        elif text:
+            await ch.send(text)
+    except Exception as e:
+        print(f"[WARNINGS] Failed to send log to {WARN_LOG_CHANNEL_ID} in guild {guild.id}: {e}")
+
+
 async def cancel_match(guild: discord.Guild, admin_msg_id: int, reason: str = "Cancelled by admin", actor: discord.Member | None = None):
     """
     Cancels an in-progress 1v1 without recording a result.
@@ -680,7 +762,31 @@ async def _sweep_fix_duplicate_colors(guild: discord.Guild):
 
 
 # ---------- DB ----------
+WARN_DB_PATH = "warnings.db"
 
+def _warn_db():
+    conn = sqlite3.connect(WARN_DB_PATH)
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS warnings (
+        guild_id INTEGER NOT NULL,
+        user_id  INTEGER NOT NULL,
+        count    INTEGER NOT NULL DEFAULT 0,
+        last_at  TEXT,
+        PRIMARY KEY (guild_id, user_id)
+    );
+    """)
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS warnings_log (
+        id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        guild_id INTEGER NOT NULL,
+        user_id  INTEGER NOT NULL,
+        mod_id   INTEGER NOT NULL,
+        reason   TEXT,
+        created_at TEXT NOT NULL
+    );
+    """)
+    conn.commit()
+    return conn
 
 
 def _init_settings():
@@ -2357,6 +2463,170 @@ async def cancelmatch_cmd(ctx: commands.Context, *args):
     return await ctx.reply(
         "Please provide either the **admin message ID** or **two player mentions**."
     )
+
+
+# =========================
+# WARN COMMANDS
+# =========================
+
+# ?warn @user [reason...]
+@bot2.command(name="warn", help="Warn a member. Usage: ?warn @user [reason]")
+@commands.has_permissions(moderate_members=True)  # needs 'Timeout Members' permission
+async def warn_cmd(ctx: commands.Context, member: discord.Member, *, reason: str = None):
+    if member == ctx.author:
+        return await ctx.reply("You can’t warn yourself 🙂")
+    if member.top_role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
+        return await ctx.reply("You can’t warn someone with an equal or higher role.")
+    if member.top_role >= ctx.guild.me.top_role:
+        return await ctx.reply("I don’t have a high enough role to manage that member.")
+
+    guild_id = ctx.guild.id
+    user_id = member.id
+
+    # Increase count
+    current = _get_warn_count(guild_id, user_id)
+    new_count = current + 1
+    _set_warn_count(guild_id, user_id, new_count)
+    _log_warning(guild_id, user_id, ctx.author.id, reason)
+
+    # Compose base response
+    base = f"⚠️ **{member.mention}** has been warned."
+    detail = f" Current warnings: **{new_count}**."
+    acted = ""
+
+    # Apply thresholds
+    # 3 warnings => 2-day timeout
+    if new_count == 3:
+        ok, info = await _apply_timeout(member, WARN_TIMEOUT_AT_3_DAYS, reason=f"3 warnings (by {ctx.author})")
+        if ok:
+            until = info.strftime('%Y-%m-%d %H:%M UTC')
+            acted = f"\n⏳ Applied **{WARN_TIMEOUT_AT_3_DAYS} day** timeout (until **{until}**)."
+        else:
+            acted = f"\n⚠️ Tried to timeout but failed: `{info}`"
+
+    # 5 warnings => 3-day timeout + optional reset to 0
+    if new_count == 5:
+        ok, info = await _apply_timeout(member, WARN_TIMEOUT_AT_5_DAYS, reason=f"5 warnings (by {ctx.author})")
+        if ok:
+            until = info.strftime('%Y-%m-%d %H:%M UTC')
+            acted = f"\n⏳ Applied **{WARN_TIMEOUT_AT_5_DAYS} day** timeout (until **{until}**)."
+        else:
+            acted = f"\n⚠️ Tried to timeout but failed: `{info}`"
+
+        if WARN_RESET_AT_5:
+            _set_warn_count(guild_id, user_id, 0)
+            detail = " Current warnings: **0** (auto-reset after 5)."
+
+    embed = discord.Embed(
+        title="Member Warned",
+        description=f"{base}{detail}{acted}",
+        color=discord.Color.orange()
+    )
+    if reason:
+        embed.add_field(name="Reason", value=reason, inline=False)
+    embed.set_footer(text=f"By {ctx.author} • {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+    await ctx.reply(embed=embed)
+
+    # --- LOG to channel 1411283522131591178 ---
+    try:
+        log_ch = ctx.guild.get_channel(1411283522131591178)
+        if log_ch:
+            new_count_for_log = 0 if (new_count == 5 and WARN_RESET_AT_5) else new_count
+            log_em = discord.Embed(
+                title="⚠️ Warning Issued",
+                color=discord.Color.orange(),
+                description=f"**User:** {member.mention} (`{member.id}`)\n"
+                            f"**Moderator:** {ctx.author.mention} (`{ctx.author.id}`)\n"
+                            f"**Guild:** `{ctx.guild.name}` (`{ctx.guild.id}`)"
+            )
+            log_em.add_field(name="New Count", value=str(new_count_for_log), inline=True)
+            log_em.add_field(name="Reason", value=(reason if reason else "(no reason)"), inline=False)
+
+            summary = []
+            if new_count == 3:
+                summary.append(f"Applied **{WARN_TIMEOUT_AT_3_DAYS} day** timeout.")
+            if new_count == 5:
+                summary.append(f"Applied **{WARN_TIMEOUT_AT_5_DAYS} day** timeout.")
+                if WARN_RESET_AT_5:
+                    summary.append("Warnings **auto-reset to 0**.")
+            if summary:
+                log_em.add_field(name="Action", value="\n".join(summary), inline=False)
+
+            log_em.set_footer(text=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC'))
+            await log_ch.send(embed=log_em)
+        else:
+            print("[WARNINGS] Log channel 1411283522131591178 not found in this guild.")
+    except Exception as e:
+        print(f"[WARNINGS] Failed to send warn log: {e}")
+
+
+# ?warnings [@user]
+@bot2.command(name="warnings", help="View warnings for you or a specific member. Usage: ?warnings [@user]")
+async def warnings_cmd(ctx: commands.Context, member: discord.Member = None):
+    target = member or ctx.author
+    count = _get_warn_count(ctx.guild.id, target.id)
+    history = _get_warning_history(ctx.guild.id, target.id, limit=10)
+
+    em = discord.Embed(
+        title=f"Warnings for {target}",
+        color=discord.Color.gold()
+    )
+    em.add_field(name="Current Count", value=str(count), inline=True)
+    if history:
+        lines = []
+        for mod_id, reason, created_at in history:
+            mod = ctx.guild.get_member(mod_id)
+            mod_name = mod.mention if mod else f"Mod:{mod_id}"
+            ts = created_at.replace('T', ' ').replace('+00:00', ' UTC')
+            reason_show = reason if reason else "(no reason)"
+            lines.append(f"• **{ts}** — by {mod_name}: {reason_show}")
+        em.add_field(name="Recent History (latest 10)", value="\n".join(lines), inline=False)
+    else:
+        em.add_field(name="Recent History", value="No warnings logged.", inline=False)
+
+    await ctx.reply(embed=em)
+
+
+# ?resetwarnings @user
+@bot2.command(name="resetwarnings", help="Admin: Reset all warnings and clear any active timeout. Usage: ?resetwarnings @user")
+@commands.has_permissions(moderate_members=True)
+async def resetwarnings_cmd(ctx: commands.Context, member: discord.Member):
+    if member.top_role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
+        return await ctx.reply("You can’t reset warnings for someone with an equal or higher role.")
+    if member.top_role >= ctx.guild.me.top_role:
+        return await ctx.reply("I don’t have a high enough role to manage that member.")
+
+    # Clear count
+    _set_warn_count(ctx.guild.id, member.id, 0)
+
+    # Remove timeout (if any)
+    ok, info = await _remove_timeout(member, reason=f"Reset by {ctx.author}")
+    if ok:
+        msg = f"✅ Reset warnings for {member.mention} and **removed any active timeout**."
+    else:
+        msg = f"✅ Reset warnings for {member.mention}. ⚠️ Tried to remove timeout but failed: `{info}`"
+
+    await ctx.reply(msg)
+
+    # --- LOG to channel 1411283522131591178 ---
+    try:
+        log_ch = ctx.guild.get_channel(1411283522131591178)
+        if log_ch:
+            log_em = discord.Embed(
+                title="♻️ Warnings Reset",
+                color=discord.Color.green(),
+                description=f"**User:** {member.mention} (`{member.id}`)\n"
+                            f"**By:** {ctx.author.mention} (`{ctx.author.id}`)\n"
+                            f"**Guild:** `{ctx.guild.name}` (`{ctx.guild.id}`)"
+            )
+            log_em.add_field(name="Timeout Cleared", value=("Yes" if ok else f"No (error: {info})"), inline=True)
+            log_em.set_footer(text=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC'))
+            await log_ch.send(embed=log_em)
+        else:
+            print("[WARNINGS] Log channel 1411283522131591178 not found in this guild.")
+    except Exception as e:
+        print(f"[WARNINGS] Failed to send reset log: {e}")
+
 
 # === END: YOUR OLD BOT 2 SECTIONS ===
 
