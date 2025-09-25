@@ -3,7 +3,6 @@
 # ===============
 # - This file runs ONLY Bot 2.
 # - Command prefix: ?
-# - Move ALL Bot 2 features here (1v1, queue, leaderboard, reactions, etc.)
 
 import discord
 from discord.ext import commands, tasks
@@ -54,7 +53,7 @@ async def ping(ctx):
     await ctx.reply("Pong from Bot 2!")
 
 # =========================
-# PASTE ALL YOUR BOT 2 LOGIC BELOW
+# ALL THE BOT 2 LOGIC BELOW
 
 def warning_only():
     """Allow this command only when called with the '!' prefix."""
@@ -623,7 +622,7 @@ def load_leaderboard_message_id_from_db(guild_id: int):
     saved = get_setting(guild_id, LB_KEY)
     LEADERBOARD_MESSAGE_ID = int(saved) if saved and saved.isdigit() else None
 
-# --- ADD (near your leaderboard code / utils) ---
+
 async def resolve_user_display(
     bot: discord.Client,
     guild: discord.Guild,
@@ -1093,7 +1092,7 @@ def _format_result_line(w_member, l_member, winner_id, loser_id, res=None, score
 
 
 
-# ------- Bot 2: Self-role embed helpers (unchanged) -------
+# ------- Bot 2: Self-role embed helpers ( -------
 async def rebuild_embed(guild):
     global MESSAGE_ID
     channel = guild.get_channel(CHANNEL_ID)
@@ -1537,11 +1536,10 @@ def warn_add(guild_id: int, user_id: int, moderator_id: int | None, reason: str 
 
 # =========================
 
-# === BEGIN: YOUR OLD BOT 2 SECTIONS ===
-# Example placeholders to show typical structure:
+# === BEGINNING OF BOT 2 SECTIONS ===
 
-# ---- Global state / config you used before ----
-# ===== Admin cancel support (NEW) =====
+# ---- Global state / config ----
+# ===== Admin cancel support =====
 CANCEL_EMOJIS = ("❌", "🛑")  # either works for cancel
 
 
@@ -1568,7 +1566,7 @@ ADMIN_ROLE_ID = 1125786680121626704
 ONEVONE_CATEGORY_ID = 1404418906382401546  # fixed category for 1v1 text/voice rooms
 
 
-# Booster cleanup (unchanged)
+# Booster cleanup
 BOT2_BOOSTER_ROLE_IDS = [1126898690284601396]
 BOT2_CUSTOM_ROLE_IDS = [
     1395942660501405799, 1395942745725603911, 1395942820669292575,
@@ -1576,7 +1574,7 @@ BOT2_CUSTOM_ROLE_IDS = [
     1395943372052758718, 1395943437861392395, 1395943497084702926
 ]
 
-# Color roles (unchanged)
+# Color roles
 COLOR_ROLE_MAP = {
     "MediumSeaGreen": 1342259618109325367,
     "MediumOrchid": 1342259240974422037,
@@ -1618,7 +1616,7 @@ LB_KEY = "leaderboard_message_id"
 COLOR_MSG_KEY = "color_message_id"
 
 
-# ---- Listeners (e.g., admin A/B confirmation) ----
+# ---- Listeners ----
 @bot2.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CheckFailure):
@@ -2170,14 +2168,6 @@ async def queue_status(ctx: commands.Context):
         remain = max(0, int(MM_TIMEOUT_S - (_now_mono() - joined)))
         msg.append(f"⏳ Your timeout in **{remain}s**.")
     await ctx.reply("\n".join(msg))
-
-
-
-
-
-
-
-
 
 # ===== COMMANDS =====
 @bot2.command(name="challenge", help="Challenge a specific user to a 1v1: ?challenge @user")
