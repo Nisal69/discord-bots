@@ -1,12 +1,10 @@
 # =========================
-# bots13.py  (Bot 1 + Bot 3)
+# bots1.py  (Bot 1 + Bot 3)
 # =========================
-# - Keeps Bot 1 and Bot 3 running together in one process
+# - Bot 1 and Bot 3 running together in one process
 # - Command prefixes:
 #       Bot 1: !
 #       Bot 3: $
-# - Put ONLY Bot 1 & Bot 3 code in this file.
-# - Do NOT include any Bot 2 code here.
 
 import asyncio
 import discord
@@ -23,19 +21,18 @@ bot1 = commands.Bot(command_prefix='!', intents=intents)
 bot3 = commands.Bot(command_prefix='$', intents=intents)
 
 # =========================
-# BOT 1: paste your Bot 1 features here
+# BOT 1
 # =========================
 @bot1.event
 async def on_ready():
     print(f'Bot 1 ready as {bot1.user}')
     await bot1.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="BisBis play CODM"))
 
-# Example command (keep/remove as you like)
 @bot1.command()
 async def ping(ctx):
     await ctx.reply("Pong from Bot 1!")
 
-# === BEGIN: YOUR OLD BOT 1 SECTIONS ===
+# === BEGINNING OF BOT 1 SECTION ===
 # Sticky note config (for bot1)
 STICKY_CHANNEL_ID = 1104523494508724325
 STICKY_NOTE_MESSAGE = (
@@ -98,11 +95,11 @@ async def end_bot1(ctx):
         embed.set_footer(text="Hope to see you again next time!")
         await channel.send(embed=embed)
         await ctx.message.delete()
-# === END: YOUR OLD BOT 1 SECTIONS ===
+
 
 
 # =========================
-# BOT 3: paste your Bot 3 features here
+# BOT 3
 # =========================
 @bot3.event
 async def on_ready():
@@ -114,7 +111,7 @@ async def on_ready():
 async def ping(ctx):
     await ctx.reply("Pong from Bot 3!")
 
-# === BEGIN: YOUR OLD BOT 3 SECTIONS ===
+# === BEGINING OF BOT 3 SECTION
 mention_deletion_enabled = True
 MENTIONED_USER_ID = 636508971036966922
 ALLOWED_ROLE_ID = 1352378784329891980
@@ -205,7 +202,7 @@ async def post_tiktok_embed(ctx, video_url: str):
         await channel.send(embed=embed, view=view)
 
 
-# === END: YOUR OLD BOT 3 SECTIONS ===
+
 
 
 # =========================
