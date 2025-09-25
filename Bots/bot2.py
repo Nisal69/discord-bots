@@ -2808,9 +2808,6 @@ async def clearwarnings_cmd(ctx: commands.Context, member: discord.Member, *, re
         print(f"[WARNINGS] Failed to send reset log: {e}")
 
 
-# === END: YOUR OLD BOT 2 SECTIONS ===
-
-
 # =========================
 # RUNNER (env-based)
 # =========================
